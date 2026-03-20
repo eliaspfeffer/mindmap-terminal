@@ -6,6 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { useStore } from '../store/mindmapStore'
 import type { TerminalNodeData, TerminalStatus } from '../types'
+import { keyToSequence } from '../utils/terminalInput'
 
 const SMALL = { width: 440, termHeight: 160 }
 const LARGE = { width: 760, termHeight: 420 }
@@ -19,11 +20,13 @@ const STATUS_COLOR: Record<TerminalStatus, string> = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
   const d = data as TerminalNodeData
+  const outerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const mountedRef = useRef(false)
   const updateTerminalStatus = useStore((s) => s.updateTerminalStatus)
+  const toggleTerminalSize = useStore((s) => s.toggleTerminalSize)
 
   const { width, termHeight } = d.size === 'large' ? LARGE : SMALL
 
@@ -59,13 +62,14 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     xtermRef.current = term
     fitAddonRef.current = fitAddon
 
-    // Focus after the DOM has settled so the hidden textarea is ready for input.
-    // Two rAF passes ensure this runs after React Flow's post-render focus logic.
-    requestAnimationFrame(() => requestAnimationFrame(() => term.focus()))
+    // Focus the outer wrapper div so our onKeyDown handler captures input.
+    // xterm's textarea is intentionally NOT focused — we handle all input ourselves.
+    requestAnimationFrame(() => outerRef.current?.focus())
 
     await window.api.terminal.create(d.terminalId, d.cwd, term.cols, term.rows, d.initialCommand)
 
-    term.onData((input) => window.api.terminal.write(d.terminalId, input))
+    // xterm is used for rendering only — pty output is written to it directly.
+    // We do NOT use term.onData for input; the outer div's onKeyDown handles that.
     term.onResize(({ cols, rows }) => window.api.terminal.resize(d.terminalId, cols, rows))
   }, [d.terminalId, d.cwd])
 
@@ -100,24 +104,61 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     return () => clearTimeout(t)
   }, [d.size])
 
-  // ── Focus xterm whenever this node becomes selected ────────────────────────
+  // ── Focus outer wrapper whenever this node becomes selected ────────────────
   // This covers keyboard navigation (arrow keys in the canvas select the node
   // but don't fire a click, so without this the terminal wouldn't get focus).
   useEffect(() => {
     if (selected) {
-      requestAnimationFrame(() => requestAnimationFrame(() => xtermRef.current?.focus()))
+      requestAnimationFrame(() => outerRef.current?.focus())
     }
   }, [selected])
 
   const headerLabel = d.cwd.replace(/^\/Users\/[^/]+/, '~')
 
-  const focusTerm = () =>
-    requestAnimationFrame(() => requestAnimationFrame(() => xtermRef.current?.focus()))
+  // ── Keyboard handler on the outer wrapper ─────────────────────────────────
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // Ctrl+Enter → toggle terminal size (canvas-level shortcut, handle here)
+      if (e.ctrlKey && !e.metaKey && e.key === 'Enter') {
+        e.preventDefault()
+        e.nativeEvent.stopImmediatePropagation()
+        toggleTerminalSize(d.parentNodeId)
+        return
+      }
+
+      const seq = keyToSequence(e)
+      if (seq !== null) {
+        e.preventDefault()
+        // stopImmediatePropagation prevents the native event from reaching the
+        // window-level canvas keyboard shortcut handler in MindMapCanvas.
+        e.nativeEvent.stopImmediatePropagation()
+        window.api.terminal.write(d.terminalId, seq)
+      }
+    },
+    [d.terminalId, d.parentNodeId, toggleTerminalSize]
+  )
+
+  // ── Paste handler on the outer wrapper ────────────────────────────────────
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      const text = e.clipboardData.getData('text/plain')
+      if (text) window.api.terminal.write(d.terminalId, text)
+    },
+    [d.terminalId]
+  )
 
   return (
     <div
-      // Clicking anywhere on the node (header or terminal body) focuses xterm
-      onMouseDown={focusTerm}
+      ref={outerRef}
+      tabIndex={0}
+      onMouseDown={() => {
+        // setTimeout(0) ensures our focus() call wins AFTER xterm's own
+        // mousedown handler which might try to focus its internal textarea.
+        setTimeout(() => outerRef.current?.focus(), 0)
+      }}
+      onKeyDown={handleKeyDown}
+      onPaste={handlePaste}
       style={{
         width,
         background: '#0a0f1e',
@@ -127,7 +168,8 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
         boxShadow: selected
           ? '0 0 0 3px rgba(59,130,246,0.25), 0 8px 32px rgba(0,0,0,0.7)'
           : '0 4px 24px rgba(0,0,0,0.6)',
-        transition: 'border-color 0.12s, width 0.2s, box-shadow 0.12s'
+        transition: 'border-color 0.12s, width 0.2s, box-shadow 0.12s',
+        outline: 'none'
       }}
     >
       <Handle
@@ -174,19 +216,7 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
         // nopan is intentionally omitted — it blocks pointer-events which
         // can prevent the xterm canvas from receiving mouse events.
         className="nodrag"
-        tabIndex={-1}
         style={{ height: termHeight, padding: '2px 4px', outline: 'none' }}
-        onMouseDown={(e) => {
-          e.stopPropagation()
-          // Double rAF: runs after React Flow has finished ALL its own
-          // synchronous focus/selection handling for this event cycle.
-          requestAnimationFrame(() => requestAnimationFrame(() => xtermRef.current?.focus()))
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation()
-          requestAnimationFrame(() => requestAnimationFrame(() => xtermRef.current?.focus()))
-        }}
       />
     </div>
   )
