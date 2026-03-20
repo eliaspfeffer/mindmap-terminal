@@ -6,7 +6,6 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { useStore } from '../store/mindmapStore'
 import type { TerminalNodeData, TerminalStatus } from '../types'
-import { keyToSequence } from '../utils/terminalInput'
 
 const SMALL = { width: 440, termHeight: 160 }
 const LARGE = { width: 760, termHeight: 420 }
@@ -20,13 +19,18 @@ const STATUS_COLOR: Record<TerminalStatus, string> = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
   const d = data as TerminalNodeData
-  const outerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const mountedRef = useRef(false)
-  const updateTerminalStatus = useStore((s) => s.updateTerminalStatus)
+  // Refs so the custom key handler always sees the latest values without re-registering
+  const parentNodeIdRef = useRef(d.parentNodeId)
   const toggleTerminalSize = useStore((s) => s.toggleTerminalSize)
+  const updateTerminalStatus = useStore((s) => s.updateTerminalStatus)
+  const toggleTerminalSizeRef = useRef(toggleTerminalSize)
+
+  useEffect(() => { parentNodeIdRef.current = d.parentNodeId }, [d.parentNodeId])
+  useEffect(() => { toggleTerminalSizeRef.current = toggleTerminalSize }, [toggleTerminalSize])
 
   const { width, termHeight } = d.size === 'large' ? LARGE : SMALL
 
@@ -62,15 +66,39 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     xtermRef.current = term
     fitAddonRef.current = fitAddon
 
-    // Focus the outer wrapper div so our onKeyDown handler captures input.
-    // xterm's textarea is intentionally NOT focused — we handle all input ourselves.
-    requestAnimationFrame(() => outerRef.current?.focus())
+    // Standard xterm.js input path: forward everything typed to the PTY.
+    // xterm handles all key-to-sequence translation, IME, paste, etc.
+    term.onData(data => window.api.terminal.write(d.terminalId, data))
+
+    // Intercept Ctrl+Enter before xterm sees it — that's our resize shortcut.
+    // Return false = xterm ignores the key (but DOM event still propagates).
+    term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.type !== 'keydown') return true
+      if (e.ctrlKey && !e.metaKey && e.key === 'Enter') {
+        toggleTerminalSizeRef.current(parentNodeIdRef.current)
+        return false
+      }
+      return true
+    })
+
+    // React Flow v12 uses pointer events (pointerdown) for drag/selection handling.
+    // We must stop BOTH pointerdown and mousedown to prevent React Flow from
+    // processing the event and stealing keyboard focus away from xterm.
+    const stopAndFocus = (e: Event) => {
+      e.stopPropagation()
+      term.focus()
+      console.log('[xterm] focus called, activeElement:', document.activeElement?.tagName, document.activeElement?.className)
+    }
+    containerRef.current.addEventListener('pointerdown', stopAndFocus)
+    containerRef.current.addEventListener('mousedown', stopAndFocus)
+
+
+    term.onResize(({ cols, rows }) => window.api.terminal.resize(d.terminalId, cols, rows))
 
     await window.api.terminal.create(d.terminalId, d.cwd, term.cols, term.rows, d.initialCommand)
 
-    // xterm is used for rendering only — pty output is written to it directly.
-    // We do NOT use term.onData for input; the outer div's onKeyDown handles that.
-    term.onResize(({ cols, rows }) => window.api.terminal.resize(d.terminalId, cols, rows))
+    // Focus after PTY is ready
+    term.focus()
   }, [d.terminalId, d.cwd])
 
   useEffect(() => {
@@ -104,61 +132,17 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     return () => clearTimeout(t)
   }, [d.size])
 
-  // ── Focus outer wrapper whenever this node becomes selected ────────────────
-  // This covers keyboard navigation (arrow keys in the canvas select the node
-  // but don't fire a click, so without this the terminal wouldn't get focus).
+  // ── Focus xterm whenever this node becomes selected (keyboard navigation) ──
   useEffect(() => {
     if (selected) {
-      requestAnimationFrame(() => outerRef.current?.focus())
+      setTimeout(() => xtermRef.current?.focus(), 50)
     }
   }, [selected])
 
   const headerLabel = d.cwd.replace(/^\/Users\/[^/]+/, '~')
 
-  // ── Keyboard handler on the outer wrapper ─────────────────────────────────
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      // Ctrl+Enter → toggle terminal size (canvas-level shortcut, handle here)
-      if (e.ctrlKey && !e.metaKey && e.key === 'Enter') {
-        e.preventDefault()
-        e.nativeEvent.stopImmediatePropagation()
-        toggleTerminalSize(d.parentNodeId)
-        return
-      }
-
-      const seq = keyToSequence(e)
-      if (seq !== null) {
-        e.preventDefault()
-        // stopImmediatePropagation prevents the native event from reaching the
-        // window-level canvas keyboard shortcut handler in MindMapCanvas.
-        e.nativeEvent.stopImmediatePropagation()
-        window.api.terminal.write(d.terminalId, seq)
-      }
-    },
-    [d.terminalId, d.parentNodeId, toggleTerminalSize]
-  )
-
-  // ── Paste handler on the outer wrapper ────────────────────────────────────
-  const handlePaste = useCallback(
-    (e: React.ClipboardEvent<HTMLDivElement>) => {
-      e.preventDefault()
-      const text = e.clipboardData.getData('text/plain')
-      if (text) window.api.terminal.write(d.terminalId, text)
-    },
-    [d.terminalId]
-  )
-
   return (
     <div
-      ref={outerRef}
-      tabIndex={0}
-      onMouseDown={() => {
-        // setTimeout(0) ensures our focus() call wins AFTER xterm's own
-        // mousedown handler which might try to focus its internal textarea.
-        setTimeout(() => outerRef.current?.focus(), 0)
-      }}
-      onKeyDown={handleKeyDown}
-      onPaste={handlePaste}
       style={{
         width,
         background: '#0a0f1e',
@@ -212,9 +196,6 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
       {/* ── xterm.js viewport ───────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        // nodrag: React Flow won't start a drag from inside this area.
-        // nopan is intentionally omitted — it blocks pointer-events which
-        // can prevent the xterm canvas from receiving mouse events.
         className="nodrag"
         style={{ height: termHeight, padding: '2px 4px', outline: 'none' }}
       />

@@ -21,7 +21,10 @@ function createWindow(): BrowserWindow {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  mainWindow.on('ready-to-show', () => {
+    mainWindow.show()
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
+  })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
