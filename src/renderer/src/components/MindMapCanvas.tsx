@@ -96,14 +96,15 @@ const MindMapCanvas: React.FC = () => {
   useEffect(() => {
     const handle = async (e: KeyboardEvent) => {
       const { selectedNodeId, nodes } = store
-      const active = document.activeElement
+      // e.target is the element that dispatched the event (always accurate for
+      // keyboard events). document.activeElement can be stale between frames.
+      const target = e.target as Element | null
 
-      // Don't intercept while focus is inside a terminal or any input/textarea
+      // Don't intercept keys while focus is inside a terminal or any text input
       if (
-        active?.closest('.xterm') ||
-        active?.classList.contains('xterm-helper-textarea') ||
-        active?.tagName === 'INPUT' ||
-        active?.tagName === 'TEXTAREA'
+        target?.closest('.xterm') ||
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA'
       ) return
 
       // ── File operations (no node required) ────────────────────────────────
