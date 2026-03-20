@@ -35,17 +35,25 @@ const MindMapNode: React.FC<NodeProps<any>> = ({ id, data, selected }) => {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter' || e.key === 'Escape') {
+      // Always stop propagation so canvas shortcuts don't fire while editing
+      e.stopPropagation()
+
+      if (e.key === 'Tab') {
         e.preventDefault()
-        e.stopPropagation()
+        commit(e.currentTarget.value)
+        // Single keypress: commit label AND create child in one shot
+        window.dispatchEvent(new CustomEvent('node:createchild', { detail: { id } }))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        commit(e.currentTarget.value)
+        // Single keypress: commit label AND create sibling in one shot
+        window.dispatchEvent(new CustomEvent('node:createsibling', { detail: { id } }))
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
         commit(e.currentTarget.value)
       }
-      // Prevent Tab from bubbling to canvas handler while editing
-      if (e.key === 'Tab') {
-        e.stopPropagation()
-      }
     },
-    [commit]
+    [commit, id]
   )
 
   return (

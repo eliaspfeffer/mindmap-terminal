@@ -59,6 +59,9 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     xtermRef.current = term
     fitAddonRef.current = fitAddon
 
+    // Focus immediately so the terminal is ready for input as soon as it appears
+    setTimeout(() => term.focus(), 80)
+
     await window.api.terminal.create(d.terminalId, d.cwd, term.cols, term.rows, d.initialCommand)
 
     term.onData((input) => window.api.terminal.write(d.terminalId, input))
@@ -154,14 +157,18 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
         ref={containerRef}
         // nodrag + nopan: React Flow skips drag/pan handling inside this area
         className="nodrag nopan"
-        style={{ height: termHeight, padding: '2px 4px' }}
+        tabIndex={-1}
+        style={{ height: termHeight, padding: '2px 4px', outline: 'none' }}
         onMouseDown={(e) => {
           e.stopPropagation()
-          // Explicitly focus the terminal so keyboard input works
-          xtermRef.current?.focus()
+          // Use setTimeout(0) so this runs after React Flow's own mousedown handler
+          setTimeout(() => xtermRef.current?.focus(), 0)
         }}
         onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => xtermRef.current?.focus()}
+        onClick={(e) => {
+          e.stopPropagation()
+          setTimeout(() => xtermRef.current?.focus(), 0)
+        }}
       />
     </div>
   )

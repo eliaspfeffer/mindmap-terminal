@@ -68,14 +68,28 @@ const MindMapCanvas: React.FC = () => {
 
   const onPaneClick = useCallback(() => store.setSelected(null), [store])
 
-  // ── Label commit ───────────────────────────────────────────────────────────
+  // ── Label commit + single-keypress node creation from within input ─────────
   useEffect(() => {
-    const handler = (e: Event) => {
+    const onCommit = (e: Event) => {
       const { id, label } = (e as CustomEvent<{ id: string; label: string }>).detail
       store.updateNodeLabel(id, label)
     }
-    window.addEventListener('node:labelcommit', handler)
-    return () => window.removeEventListener('node:labelcommit', handler)
+    const onCreateChild = (e: Event) => {
+      const { id } = (e as CustomEvent<{ id: string }>).detail
+      store.addChildNode(id)
+    }
+    const onCreateSibling = (e: Event) => {
+      const { id } = (e as CustomEvent<{ id: string }>).detail
+      store.addSiblingNode(id)
+    }
+    window.addEventListener('node:labelcommit', onCommit)
+    window.addEventListener('node:createchild', onCreateChild)
+    window.addEventListener('node:createsibling', onCreateSibling)
+    return () => {
+      window.removeEventListener('node:labelcommit', onCommit)
+      window.removeEventListener('node:createchild', onCreateChild)
+      window.removeEventListener('node:createsibling', onCreateSibling)
+    }
   }, [store])
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
@@ -181,29 +195,29 @@ const MindMapCanvas: React.FC = () => {
           return
         }
 
-        // ⌘T → attach terminal with Claude already running
-        if ((e.metaKey || e.ctrlKey) && e.key === 't' && !e.shiftKey) {
+        // Ctrl+T → attach terminal with Claude already running
+        if (e.ctrlKey && !e.metaKey && e.key === 't' && !e.shiftKey) {
           e.preventDefault()
           store.attachTerminal(selectedNodeId, homeRef.current, 'claude')
           return
         }
 
-        // ⌘Shift+T → attach plain terminal
-        if ((e.metaKey || e.ctrlKey) && e.key === 'T' && e.shiftKey) {
+        // Ctrl+Shift+T → attach plain terminal
+        if (e.ctrlKey && !e.metaKey && e.shiftKey && e.key === 'T') {
           e.preventDefault()
           store.attachTerminal(selectedNodeId, homeRef.current)
           return
         }
 
-        // ⌘Enter → toggle terminal size
-        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        // Ctrl+Enter → toggle terminal size
+        if (e.ctrlKey && !e.metaKey && e.key === 'Enter') {
           e.preventDefault()
           store.toggleTerminalSize(selectedNodeId)
           return
         }
 
-        // ⌘W → close terminal
-        if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        // Ctrl+K → close/detach terminal from node
+        if (e.ctrlKey && !e.metaKey && e.key === 'k') {
           e.preventDefault()
           const node = selectedNode as any
           if (node.data.terminalId) {
@@ -308,7 +322,7 @@ const MindMapCanvas: React.FC = () => {
           whiteSpace: 'nowrap'
         }}
       >
-        Tab child · Enter sibling · F2 rename · ← → ↑ ↓ navigate · ⌘T claude terminal · ⌘⇧T plain terminal · ⌘↩ resize · ⌘W close terminal · Del delete · ⌘S save · ⌘O open
+        Tab child · Enter sibling · F2 rename · ← → ↑ ↓ navigate · ^T claude · ^⇧T terminal · ^↩ resize · ^K close terminal · Del delete · ⌘S save · ⌘O open
       </div>
     </div>
   )
