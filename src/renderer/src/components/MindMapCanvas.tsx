@@ -84,11 +84,13 @@ const MindMapCanvas: React.FC = () => {
       const { selectedNodeId, nodes } = store
       const active = document.activeElement
 
-      // Don't intercept inside xterm or input fields
-      if (active?.closest('.xterm') || active?.tagName === 'INPUT') return
-
-      const isEditing = active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA'
-      if (isEditing) return
+      // Don't intercept while focus is inside a terminal or any input/textarea
+      if (
+        active?.closest('.xterm') ||
+        active?.classList.contains('xterm-helper-textarea') ||
+        active?.tagName === 'INPUT' ||
+        active?.tagName === 'TEXTAREA'
+      ) return
 
       // ── File operations (no node required) ────────────────────────────────
       if ((e.metaKey || e.ctrlKey) && e.key === 's' && !e.shiftKey) {
@@ -116,6 +118,46 @@ const MindMapCanvas: React.FC = () => {
       const selectedNode = nodes.find((n) => n.id === selectedNodeId)
       if (!selectedNode) return
 
+      // ── Arrow key navigation (any node type) ──────────────────────────────
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        const { edges } = store
+        let targetId: string | null = null
+
+        if (e.key === 'ArrowLeft') {
+          // Go to parent
+          const parentEdge = edges.find((ed) => ed.target === selectedNodeId)
+          if (parentEdge) targetId = parentEdge.source
+        } else if (e.key === 'ArrowRight') {
+          // Go to first mindmap child
+          const childEdge = edges.find(
+            (ed) => ed.source === selectedNodeId && nodes.find((n) => n.id === ed.target && n.type === 'mindmap')
+          )
+          if (childEdge) targetId = childEdge.target
+        } else {
+          // Up / Down → navigate siblings (same parent, mindmap nodes only)
+          const parentEdge = edges.find((ed) => ed.target === selectedNodeId)
+          if (parentEdge) {
+            const siblings = edges
+              .filter(
+                (ed) =>
+                  ed.source === parentEdge.source &&
+                  nodes.find((n) => n.id === ed.target && n.type === 'mindmap')
+              )
+              .map((ed) => ed.target)
+            const idx = siblings.indexOf(selectedNodeId)
+            if (e.key === 'ArrowUp' && idx > 0) targetId = siblings[idx - 1]
+            if (e.key === 'ArrowDown' && idx < siblings.length - 1) targetId = siblings[idx + 1]
+          }
+        }
+
+        if (targetId) {
+          store.setNodes(store.nodes.map((n) => ({ ...n, selected: n.id === targetId })))
+          store.setSelected(targetId)
+        }
+        return
+      }
+
       // ── Mindmap-node-only shortcuts ────────────────────────────────────────
       if (selectedNode.type === 'mindmap') {
         // Tab → add child
@@ -139,8 +181,15 @@ const MindMapCanvas: React.FC = () => {
           return
         }
 
-        // ⌘T → attach terminal
-        if ((e.metaKey || e.ctrlKey) && e.key === 't') {
+        // ⌘T → attach terminal with Claude already running
+        if ((e.metaKey || e.ctrlKey) && e.key === 't' && !e.shiftKey) {
+          e.preventDefault()
+          store.attachTerminal(selectedNodeId, homeRef.current, 'claude')
+          return
+        }
+
+        // ⌘Shift+T → attach plain terminal
+        if ((e.metaKey || e.ctrlKey) && e.key === 'T' && e.shiftKey) {
           e.preventDefault()
           store.attachTerminal(selectedNodeId, homeRef.current)
           return
@@ -259,7 +308,7 @@ const MindMapCanvas: React.FC = () => {
           whiteSpace: 'nowrap'
         }}
       >
-        Tab add child · Enter add sibling · F2 rename · ⌘T terminal · ⌘↩ resize · ⌘W close terminal · Del delete · ⌘S save · ⌘O open
+        Tab child · Enter sibling · F2 rename · ← → ↑ ↓ navigate · ⌘T claude terminal · ⌘⇧T plain terminal · ⌘↩ resize · ⌘W close terminal · Del delete · ⌘S save · ⌘O open
       </div>
     </div>
   )

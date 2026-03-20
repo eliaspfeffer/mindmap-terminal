@@ -47,10 +47,11 @@ app.whenReady().then(() => {
   const mainWindow = createWindow()
 
   // ── Terminal IPC ────────────────────────────────────────────────────────────
-  ipcMain.handle('terminal:create', (_, { id, cwd, cols, rows }) => {
+  ipcMain.handle('terminal:create', (_, { id, cwd, cols, rows, initialCommand }) => {
     terminalManager.create(id, cwd, cols, rows,
       (data) => mainWindow.webContents.send('terminal:data', { id, data }),
-      (busy) => mainWindow.webContents.send('terminal:status', { id, busy })
+      (busy) => mainWindow.webContents.send('terminal:status', { id, busy }),
+      initialCommand
     )
   })
 

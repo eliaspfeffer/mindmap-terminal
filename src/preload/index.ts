@@ -2,8 +2,8 @@ import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 
 const api = {
   terminal: {
-    create: (id: string, cwd: string, cols: number, rows: number) =>
-      ipcRenderer.invoke('terminal:create', { id, cwd, cols, rows }),
+    create: (id: string, cwd: string, cols: number, rows: number, initialCommand?: string) =>
+      ipcRenderer.invoke('terminal:create', { id, cwd, cols, rows, initialCommand }),
     write: (id: string, data: string) =>
       ipcRenderer.invoke('terminal:write', { id, data }),
     resize: (id: string, cols: number, rows: number) =>

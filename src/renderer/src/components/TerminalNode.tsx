@@ -59,7 +59,7 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     xtermRef.current = term
     fitAddonRef.current = fitAddon
 
-    await window.api.terminal.create(d.terminalId, d.cwd, term.cols, term.rows)
+    await window.api.terminal.create(d.terminalId, d.cwd, term.cols, term.rows, d.initialCommand)
 
     term.onData((input) => window.api.terminal.write(d.terminalId, input))
     term.onResize(({ cols, rows }) => window.api.terminal.resize(d.terminalId, cols, rows))
@@ -152,10 +152,16 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
       {/* ── xterm.js viewport ───────────────────────────────────────────── */}
       <div
         ref={containerRef}
+        // nodrag + nopan: React Flow skips drag/pan handling inside this area
+        className="nodrag nopan"
         style={{ height: termHeight, padding: '2px 4px' }}
-        // Prevent React Flow from intercepting mouse events inside terminal
-        onMouseDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => {
+          e.stopPropagation()
+          // Explicitly focus the terminal so keyboard input works
+          xtermRef.current?.focus()
+        }}
         onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => xtermRef.current?.focus()}
       />
     </div>
   )

@@ -14,9 +14,13 @@ const MindMapNode: React.FC<NodeProps<any>> = ({ id, data, selected }) => {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (d.editing && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
+    if (d.editing) {
+      // Small delay lets React Flow finish its own focus handling before we grab it
+      const t = setTimeout(() => {
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      }, 30)
+      return () => clearTimeout(t)
     }
   }, [d.editing])
 

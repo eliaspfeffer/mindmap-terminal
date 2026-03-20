@@ -21,7 +21,8 @@ class TerminalManager {
     cols: number,
     rows: number,
     onData: (data: string) => void,
-    onStatus: (busy: boolean) => void
+    onStatus: (busy: boolean) => void,
+    initialCommand?: string
   ): void {
     if (this.sessions.has(id)) return
 
@@ -61,6 +62,11 @@ class TerminalManager {
     })
 
     this.sessions.set(id, session)
+
+    if (initialCommand) {
+      // Give the shell ~300ms to fully initialise before sending the command
+      setTimeout(() => ptyProcess.write(initialCommand + '\n'), 300)
+    }
   }
 
   write(id: string, data: string): void {

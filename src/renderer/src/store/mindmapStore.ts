@@ -25,7 +25,7 @@ interface Store {
   updateNodeLabel: (id: string, label: string) => void
   startEditing: (id: string) => void
 
-  attachTerminal: (nodeId: string, cwd: string) => string
+  attachTerminal: (nodeId: string, cwd: string, initialCommand?: string) => string
   detachTerminal: (nodeId: string) => void
   updateTerminalStatus: (terminalId: string, status: TerminalStatus) => void
   toggleTerminalSize: (nodeId: string) => void
@@ -58,10 +58,11 @@ export const useStore = create<Store>((set, get) => ({
       id: newId,
       type: 'mindmap',
       position: { x: parent.position.x + 240, y: parent.position.y + childCount * 80 },
-      data: { label: 'New node', editing: true }
+      data: { label: 'New node', editing: true },
+      selected: true
     }
     set({
-      nodes: [...nodes, newNode],
+      nodes: [...nodes.map((n) => ({ ...n, selected: false })), newNode],
       edges: [...edges, { id: `e-${parentId}-${newId}`, source: parentId, target: newId }],
       selectedNodeId: newId
     })
@@ -81,10 +82,11 @@ export const useStore = create<Store>((set, get) => ({
       id: newId,
       type: 'mindmap',
       position: { x: node.position.x, y: node.position.y + 80 },
-      data: { label: 'New node', editing: true }
+      data: { label: 'New node', editing: true },
+      selected: true
     }
     set({
-      nodes: [...nodes, newNode],
+      nodes: [...nodes.map((n) => ({ ...n, selected: false })), newNode],
       edges: [
         ...edges,
         { id: `e-${parentEdge.source}-${newId}`, source: parentEdge.source, target: newId }
@@ -132,7 +134,7 @@ export const useStore = create<Store>((set, get) => ({
 
   // ── Terminal operations ──────────────────────────────────────────────────────
 
-  attachTerminal: (nodeId, cwd) => {
+  attachTerminal: (nodeId, cwd, initialCommand) => {
     const { nodes, edges } = get()
     const node = nodes.find((n) => n.id === nodeId)
     if (!node || node.type !== 'mindmap') return ''
@@ -145,7 +147,7 @@ export const useStore = create<Store>((set, get) => ({
       id: termNodeId,
       type: 'terminal',
       position: { x: node.position.x, y: node.position.y + 120 },
-      data: { terminalId, parentNodeId: nodeId, size: 'small', status: 'idle', cwd }
+      data: { terminalId, parentNodeId: nodeId, size: 'small', status: 'idle', cwd, initialCommand }
     }
 
     set({

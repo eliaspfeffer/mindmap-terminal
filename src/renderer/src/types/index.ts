@@ -13,6 +13,7 @@ export interface TerminalNodeData extends Record<string, unknown> {
   size: 'small' | 'large'
   status: TerminalStatus
   cwd: string
+  initialCommand?: string
 }
 
 export type AppNode =
