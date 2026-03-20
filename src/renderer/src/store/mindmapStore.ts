@@ -147,7 +147,10 @@ export const useStore = create<Store>((set, get) => ({
       id: termNodeId,
       type: 'terminal',
       position: { x: node.position.x, y: node.position.y + 120 },
-      data: { terminalId, parentNodeId: nodeId, size: 'small', status: 'idle', cwd, initialCommand }
+      data: { terminalId, parentNodeId: nodeId, size: 'small', status: 'idle', cwd, initialCommand },
+      // Prevent React Flow from calling focus() on this node's wrapper element,
+      // which would steal keyboard focus away from xterm's hidden textarea.
+      focusable: false
     }
 
     set({

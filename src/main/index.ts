@@ -106,10 +106,16 @@ app.whenReady().then(() => {
   const mainWindow = createWindow()
 
   // ── Terminal IPC ────────────────────────────────────────────────────────────
+  const safeSend = (channel: string, payload: unknown) => {
+    if (!mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send(channel, payload)
+    }
+  }
+
   ipcMain.handle('terminal:create', (_, { id, cwd, cols, rows, initialCommand }) => {
     terminalManager.create(id, cwd, cols, rows,
-      (data) => mainWindow.webContents.send('terminal:data', { id, data }),
-      (busy) => mainWindow.webContents.send('terminal:status', { id, busy }),
+      (data) => safeSend('terminal:data', { id, data }),
+      (busy) => safeSend('terminal:status', { id, busy }),
       initialCommand
     )
   })

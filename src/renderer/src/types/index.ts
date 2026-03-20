@@ -18,7 +18,7 @@ export interface TerminalNodeData extends Record<string, unknown> {
 
 export type AppNode =
   | { id: string; type: 'mindmap'; position: { x: number; y: number }; data: MindMapNodeData; selected?: boolean }
-  | { id: string; type: 'terminal'; position: { x: number; y: number }; data: TerminalNodeData; selected?: boolean }
+  | { id: string; type: 'terminal'; position: { x: number; y: number }; data: TerminalNodeData; selected?: boolean; focusable: false }
 
 export interface AppEdge {
   id: string

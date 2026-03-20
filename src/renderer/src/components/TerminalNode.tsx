@@ -59,8 +59,9 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     xtermRef.current = term
     fitAddonRef.current = fitAddon
 
-    // Focus immediately so the terminal is ready for input as soon as it appears
-    setTimeout(() => term.focus(), 80)
+    // Focus after the DOM has settled so the hidden textarea is ready for input.
+    // Two rAF passes ensure this runs after React Flow's post-render focus logic.
+    requestAnimationFrame(() => requestAnimationFrame(() => term.focus()))
 
     await window.api.terminal.create(d.terminalId, d.cwd, term.cols, term.rows, d.initialCommand)
 
@@ -148,26 +149,29 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
           {headerLabel}
         </span>
         <span style={{ color: '#334155', fontSize: 10, letterSpacing: '0.03em', flexShrink: 0 }}>
-          ⌘↩ {d.size === 'small' ? 'expand' : 'shrink'} · ⌘W close
+          ^↩ {d.size === 'small' ? 'expand' : 'shrink'} · ^K close
         </span>
       </div>
 
       {/* ── xterm.js viewport ───────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        // nodrag + nopan: React Flow skips drag/pan handling inside this area
-        className="nodrag nopan"
+        // nodrag: React Flow won't start a drag from inside this area.
+        // nopan is intentionally omitted — it blocks pointer-events which
+        // can prevent the xterm canvas from receiving mouse events.
+        className="nodrag"
         tabIndex={-1}
         style={{ height: termHeight, padding: '2px 4px', outline: 'none' }}
         onMouseDown={(e) => {
           e.stopPropagation()
-          // Use setTimeout(0) so this runs after React Flow's own mousedown handler
-          setTimeout(() => xtermRef.current?.focus(), 0)
+          // Double rAF: runs after React Flow has finished ALL its own
+          // synchronous focus/selection handling for this event cycle.
+          requestAnimationFrame(() => requestAnimationFrame(() => xtermRef.current?.focus()))
         }}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation()
-          setTimeout(() => xtermRef.current?.focus(), 0)
+          requestAnimationFrame(() => requestAnimationFrame(() => xtermRef.current?.focus()))
         }}
       />
     </div>
