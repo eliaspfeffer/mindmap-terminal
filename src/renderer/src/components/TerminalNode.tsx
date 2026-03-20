@@ -87,6 +87,7 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     const stopAndFocus = (e: Event) => {
       e.stopPropagation()
       term.focus()
+      console.log('[xterm] focus called, activeElement:', document.activeElement?.tagName, document.activeElement?.className)
     }
     containerRef.current.addEventListener('pointerdown', stopAndFocus)
     containerRef.current.addEventListener('mousedown', stopAndFocus)
