@@ -100,10 +100,24 @@ const TerminalNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     return () => clearTimeout(t)
   }, [d.size])
 
+  // ── Focus xterm whenever this node becomes selected ────────────────────────
+  // This covers keyboard navigation (arrow keys in the canvas select the node
+  // but don't fire a click, so without this the terminal wouldn't get focus).
+  useEffect(() => {
+    if (selected) {
+      requestAnimationFrame(() => requestAnimationFrame(() => xtermRef.current?.focus()))
+    }
+  }, [selected])
+
   const headerLabel = d.cwd.replace(/^\/Users\/[^/]+/, '~')
+
+  const focusTerm = () =>
+    requestAnimationFrame(() => requestAnimationFrame(() => xtermRef.current?.focus()))
 
   return (
     <div
+      // Clicking anywhere on the node (header or terminal body) focuses xterm
+      onMouseDown={focusTerm}
       style={{
         width,
         background: '#0a0f1e',
